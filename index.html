@@ -1,0 +1,19 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Bradford Prayer Times</title>
+<link rel="manifest" href="manifest.json"><meta name="theme-color" content="#0b1f3a">
+<link rel="stylesheet" href="style.css"></head><body>
+<header><div class="logo">🕌 <b>Bradford Prayer Times</b><small>Bradford, United Kingdom</small></div>
+<div class="clock"><div id="clock"></div><small id="dates"></small></div></header>
+<nav><button data-v="today" class="on">Today</button><button data-v="month">Month</button><button data-v="upload">Upload</button><button data-v="settings">Settings</button></nav>
+<main>
+<section id="today"><div id="next" class="next"></div><div id="cards" class="cards"></div><div id="jummah" class="card"></div></section>
+<section id="month" hidden><div class="bar"><button id="pm">‹ Prev</button><h2 id="mt"></h2><button id="nm">Next ›</button><button onclick="print()">Print / PDF</button></div><div class="scroll"><table id="tbl"></table></div></section>
+<section id="upload" hidden><h2>Upload Prayer Timetable</h2>
+<div id="drop" class="drop">Drag &amp; drop timetable image (JPG/PNG) or <label class="btn">Browse<input id="file" type="file" accept="image/jpeg,image/png" hidden></label></div>
+<img id="prev" hidden alt="preview"><p id="status"></p>
+<div id="editor" hidden><h3 id="et"></h3><p class="warn">Check every value against the image. Nothing is saved until you confirm.</p><div class="scroll"><table id="etbl"></table></div><button class="btn" id="save">Confirm and Save</button></div></section>
+<section id="settings" hidden><h2>Settings</h2><div class="card" id="set"></div></section>
+</main>
+<div id="alert" hidden><div><h1 id="at"></h1><h2 id="ac"></h2><button class="btn" id="stop">Mute</button> <button class="btn" id="close">Dismiss</button></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<script src="script.js"></script></body></html>
