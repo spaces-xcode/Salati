@@ -57,12 +57,14 @@ function fire(p,title,body,sound){
  if(sound)play(db.set.mode);
  $('#at').textContent=title;$('#ac').textContent=body;$('#alert').hidden=false;
  if(db.set.notif&&'Notification' in window&&Notification.permission=='granted')new Notification(title,{body})}
-function check(n,r){const hh=pad(n.getHours())+':'+pad(n.getMinutes()),today=n.toDateString();
+function check(n,r){const today=n.toDateString();
+ // Catch-up windows (not an exact-minute match) so throttled/background timers still fire.
+ const due=(t,mins)=>{const d=n-at(n,t);return d>=0&&d<mins*6e4};
  for(const p of PR){if(!db.set.on[p])continue;           // Sunrise is never checked: no Adhan
   const st=r[ST[p]],iq=r[IQ[p]],mark=today+p+'s',remK=today+p+'r';
-  if(OK(st)&&hh==st&&!db.set.fired[mark]){db.set.fired[mark]=1;pruneFired();save();fire(p,`IT'S TIME FOR ${p.toUpperCase()}`,'Scheduled: '+st,true)}
-  if(db.set.rem&&OK(iq)){const rt=new Date(at(n,iq)-db.set.rem*6e4),rh=pad(rt.getHours())+':'+pad(rt.getMinutes());
-   if(hh==rh&&!db.set.fired[remK]){db.set.fired[remK]=1;save();fire(p,`${p.toUpperCase()} Iqama in ${db.set.rem} min`,'Iqama: '+iq,false);beep(1)}}}}
+  if(OK(st)&&due(st,5)&&!db.set.fired[mark]){db.set.fired[mark]=1;pruneFired();save();fire(p,`IT'S TIME FOR ${p.toUpperCase()}`,'Scheduled: '+st,true)}
+  if(db.set.rem&&OK(iq)){const rt=new Date(at(n,iq)-db.set.rem*6e4),rs=pad(rt.getHours())+':'+pad(rt.getMinutes());
+   if(due(rs,2)&&!db.set.fired[remK]){db.set.fired[remK]=1;save();fire(p,`${p.toUpperCase()} Iqama in ${db.set.rem} min`,'Iqama: '+iq,false);beep(1)}}}}
 function pruneFired(){const k=Object.keys(db.set.fired);if(k.length>60)k.slice(0,30).forEach(x=>delete db.set.fired[x])}
 $('#stop').onclick=stopAdhan;$('#close').onclick=()=>{stopAdhan();$('#alert').hidden=true};
 
@@ -138,4 +140,8 @@ function settings(){const s=db.set;
 
 /* ---------- Init ---------- */
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+// Sound-unlock banner: browsers block autoplay until the page has had one tap/click
+if(!(navigator.userActivation&&navigator.userActivation.hasBeenActive))$('#snd').hidden=false;
+['click','touchstart','keydown'].forEach(e=>addEventListener(e,()=>{unlock();$('#snd').hidden=true},{once:true}));
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 cards();month();settings();tick();setInterval(tick,1000);setInterval(cards,60000);
