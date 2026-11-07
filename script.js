@@ -84,23 +84,69 @@ const drop=$('#drop');
 drop.ondragover=e=>{e.preventDefault();drop.classList.add('over')};drop.ondragleave=()=>drop.classList.remove('over');
 drop.ondrop=e=>{e.preventDefault();drop.classList.remove('over');handle(e.dataTransfer.files[0])};
 $('#file').onchange=e=>handle(e.target.files[0]);
+/* Clean the photo before OCR: colour fills (yellow/green rows) and grid lines are what confuse Tesseract.
+   1) take max(R,G,B) so coloured fills become bright, 2) adaptive threshold, 3) erase long grid lines. */
+function binarize(img){
+ const w=img.width,h=img.height,d=img.data,g=new Uint8Array(w*h);
+ for(let i=0;i<w*h;i++)g[i]=Math.max(d[4*i],d[4*i+1],d[4*i+2]);
+ const W=w+1,I=new Float64Array(W*(h+1));
+ for(let y=0;y<h;y++){let row=0;for(let x=0;x<w;x++){row+=g[y*w+x];I[(y+1)*W+x+1]=I[y*W+x+1]+row}}
+ const R=25,dark=new Uint8Array(w*h);
+ for(let y=0;y<h;y++){const y0=Math.max(0,y-R),y1=Math.min(h,y+R+1);
+  for(let x=0;x<w;x++){const x0=Math.max(0,x-R),x1=Math.min(w,x+R+1);
+   const mean=(I[y1*W+x1]-I[y0*W+x1]-I[y1*W+x0]+I[y0*W+x0])/((y1-y0)*(x1-x0));
+   dark[y*w+x]=g[y*w+x]<mean-15?1:0}}
+ const kill=new Uint8Array(w*h),minH=Math.max(40,Math.round(w*.03)),minV=Math.max(30,Math.round(h*.018));
+ for(let y=0;y<h;y++){let x=0;while(x<w){if(dark[y*w+x]){const s=x;while(x<w&&dark[y*w+x])x++;if(x-s>=minH)for(let k=s;k<x;k++)kill[y*w+k]=1}else x++}}
+ for(let x=0;x<w;x++){let y=0;while(y<h){if(dark[y*w+x]){const s=y;while(y<h&&dark[y*w+x])y++;if(y-s>=minV)for(let k=s;k<y;k++)kill[k*w+x]=1}else y++}}
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+  let k=0;for(let dy=-1;dy<=1&&!k;dy++)for(let dx=-1;dx<=1;dx++){const yy=y+dy,xx=x+dx;if(yy>=0&&yy<h&&xx>=0&&xx<w&&kill[yy*w+xx]){k=1;break}}
+  const v=dark[y*w+x]&&!k?0:255,i=4*(y*w+x);d[i]=d[i+1]=d[i+2]=v;d[i+3]=255}
+ return img}
+async function prep(f){
+ const bmp=await createImageBitmap(f),sc=Math.min(4,Math.max(1,2550/bmp.width));
+ const c=document.createElement('canvas'),P=30;c.width=Math.round(bmp.width*sc);c.height=Math.round(bmp.height*sc);
+ const x=c.getContext('2d',{willReadFrequently:true});x.imageSmoothingQuality='high';x.drawImage(bmp,0,0,c.width,c.height);
+ x.putImageData(binarize(x.getImageData(0,0,c.width,c.height)),0,0);
+ const o=document.createElement('canvas');o.width=c.width+2*P;o.height=c.height+2*P;
+ const ox=o.getContext('2d');ox.fillStyle='#fff';ox.fillRect(0,0,o.width,o.height);ox.drawImage(c,P,P);return o}
+/* Fix typical OCR slips inside a time token (O->0, l/I/|->1, S->5, B->8) */
+const fixTok=t=>t.replace(/[Oo]/g,'0').replace(/[lI|]/g,'1').replace(/S/g,'5').replace(/B/g,'8');
+function parseTable(txt){
+ const mm=txt.match(new RegExp('('+MONTHS.join('|')+')\\s*(20\\d\\d)','i'));
+ let y=new Date().getFullYear(),m=new Date().getMonth()+1,gotM=false;
+ if(mm){m=MONTHS.findIndex(x=>x.toLowerCase()==mm[1].toLowerCase())+1;y=+mm[2];gotM=true}
+ const rows={};
+ txt.split('\n').forEach(l=>{
+  l=l.replace(/^[\s|_\[\]()!'"`.,;:-]+/,'');
+  const a=l.match(/^(\d{1,2})\s*[*†‡]?[\s|]+(.*)$/);if(!a)return;
+  const day=+a[1];if(day<1||day>31)return;
+  const t=[],re=/([0-9OoIlSB|]{1,2})\s*[:.;,]\s*([0-9OoIlSB|]{2})(?![0-9])/g;let k;
+  while((k=re.exec(a[2]))){t.push(pad(+fixTok(k[1]))+':'+fixTok(k[2]))}
+  if(t.length>=11)rows[day]=t.slice(0,11)});
+ return{y,m,rows,gotM}}
 async function handle(f){
  if(!f||!/^image\/(jpe?g|png)$/.test(f.type))return $('#status').textContent='❌ Invalid file. Please upload a JPG or PNG image.';
  const url=URL.createObjectURL(f);$('#prev').src=url;$('#prev').hidden=false;
  if(!window.Tesseract)return $('#status').textContent='❌ OCR library not loaded (offline?). You can still edit the month manually in Settings.';
- try{$('#status').textContent='⏳ Reading image… 0%';
-  const r=await Tesseract.recognize(f,'eng',{logger:m=>{if(m.status=='recognizing text')$('#status').textContent='⏳ Reading image… '+Math.round(m.progress*100)+'%'}});
-  const txt=r.data.text,mm=txt.match(new RegExp('('+MONTHS.join('|')+')\\s*(20\\d\\d)','i'));
-  let y=new Date().getFullYear(),m=new Date().getMonth()+1;
-  if(mm){m=MONTHS.findIndex(x=>x.toLowerCase()==mm[1].toLowerCase())+1;y=+mm[2]}
-  const rows={};
-  txt.split('\n').forEach(l=>{const a=l.match(/^\s*(\d{1,2})\s+(.*)$/);if(!a)return;
-   const t=(a[2].match(/\d{1,2}\s*[:.;]\s*\d{2}/g)||[]).map(x=>{const[h,mi]=x.split(/[:.;]/);return pad(+h)+':'+mi.trim()});
-   if(t.length>=11&&+a[1]>=1&&+a[1]<=31)rows[+a[1]]=t.slice(0,11)});
-  const found=Object.keys(rows).length;
-  $('#status').textContent=found?`✅ Recognised ${found} rows for ${MONTHS[m-1]} ${y}. Please verify below.`:'⚠️ Could not recognise any rows. Try a sharper image, or fill the table manually.';
-  openEditor(y,m,rows)}
- catch(e){$('#status').textContent='❌ OCR failed: '+e.message}}
+ let worker;
+ try{$('#status').textContent='⏳ Preparing image…';
+  let step='';
+  worker=await Tesseract.createWorker('eng',1,{logger:m=>{if(m.status=='recognizing text')$('#status').textContent='⏳ Reading image'+step+'… '+Math.round(m.progress*100)+'%'}});
+  await worker.setParameters({tessedit_pageseg_mode:'6',preserve_interword_spaces:'1'});
+  let best={y:0,m:0,rows:{}},cleaned=null;
+  try{cleaned=await prep(f)}catch(e){console.warn('prep failed',e)}
+  const attempts=[];if(cleaned)attempts.push(cleaned);attempts.push(f);
+  for(let i=0;i<attempts.length;i++){
+   step=i?' (2nd try)':'';
+   const r=await worker.recognize(attempts[i]),p=parseTable(r.data.text);
+   if(Object.keys(p.rows).length>Object.keys(best.rows).length||!best.y)best=p;
+   if(Object.keys(best.rows).length>=25)break}
+  const found=Object.keys(best.rows).length;
+  $('#status').textContent=found?`✅ Recognised ${found} rows for ${MONTHS[best.m-1]} ${best.y}.${best.gotM?'':' (Month not detected – please check the month/year.)'} Please verify below.`:'⚠️ Could not recognise any rows. Try a sharper image, or fill the table manually.';
+  openEditor(best.y,best.m,best.rows)}
+ catch(e){$('#status').textContent='❌ OCR failed: '+e.message}
+ finally{try{worker&&await worker.terminate()}catch{}}}
 let ed={};
 function openEditor(y,m,rows){ed={y,m};const days=new Date(y,m,0).getDate();$('#editor').hidden=false;$('#et').textContent=MONTHS[m-1]+' '+y;
  let h='<tr><th>Day</th>'+HEAD.map(x=>`<th>${x}</th>`).join('')+'</tr>';
