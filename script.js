@@ -7,7 +7,7 @@ const MONTHS=['January','February','March','April','May','June','July','August',
 const OK=t=>/^([01]\d|2[0-3]):[0-5]\d$/.test(t), hm=s=>s.slice(0,2)+':'+s.slice(2);
 
 /* ---------- Storage ---------- */
-let db; try{db=JSON.parse(localStorage.bpt)}catch{db=null}
+let db; try{db=JSON.parse(localStorage.bpt)}catch(_e){db=null}
 if(!db){db={data:{},set:{on:{fajr:1,dhuhr:1,asr:1,maghrib:1,isha:1},mode:'full',vol:.8,rem:0,notif:0,jtime:'13:00',jmsg:"Jummah Prayer at 1:00 PM InshaAllah.",fired:{}}};
  // Seed: Bradford November 2026 (transcribed from the supplied image)
  const S=`0511 0704 1151 1405 1634 1639 1829|0512 0705 1151 1404 1632 1637 1829|0512 0707 1151 1402 1630 1635 1828|0513 0709 1151 1401 1628 1633 1828|0514 0711 1151 1400 1626 1631 1827|0515 0713 1151 1358 1625 1630 1825|0517 0715 1151 1357 1623 1628 1824|0519 0717 1151 1355 1621 1626 1822|0520 0719 1151 1354 1619 1624 1821|0522 0721 1151 1353 1618 1623 1819|0523 0723 1151 1351 1616 1621 1818|0525 0725 1151 1350 1614 1619 1817|0527 0726 1151 1349 1613 1618 1815|0528 0728 1151 1348 1611 1616 1814|0530 0730 1152 1347 1609 1614 1813|0531 0732 1152 1346 1608 1613 1812|0533 0734 1152 1344 1608 1613 1811|0534 0736 1152 1343 1605 1610 1809|0536 0738 1152 1342 1604 1609 1808|0537 0739 1153 1341 1602 1607 1807|0539 0741 1153 1341 1601 1606 1807|0540 0743 1153 1340 1600 1605 1806|0541 0745 1153 1339 1559 1604 1805|0543 0746 1154 1338 1557 1602 1804|0544 0748 1154 1337 1556 1601 1803|0546 0750 1154 1336 1555 1600 1803|0547 0751 1155 1336 1554 1559 1802|0548 0753 1155 1335 1553 1558 1801|0549 0755 1155 1335 1553 1558 1801|0551 0756 1156 1334 1552 1557 1800`;
@@ -26,8 +26,8 @@ document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>{
 let view=new Date();
 function tick(){
  const n=new Date(); $('#clock').textContent=n.toLocaleTimeString('en-GB');
- let h=''; try{h=' · '+n.toLocaleDateString('en-u-ca-islamic',{day:'numeric',month:'long',year:'numeric'})}catch{}
- $('#dates').textContent=n.toLocaleDateString('en-GB',{dateStyle:'full'})+h;
+ let h=''; try{h=' · '+n.toLocaleDateString('en-u-ca-islamic',{day:'numeric',month:'long',year:'numeric'})}catch(_e){}
+ $('#dates').textContent=n.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'})+h;
  const r=rowOf(n); if(!r){$('#next').textContent='No timetable saved for this month – go to Upload.';return}
  // next prayer (by Iqama); falls through to tomorrow's Fajr
  let nx=null;for(const p of PR){const t=at(n,r[ST[p]]);if(t>n){nx={p,t};break}}
@@ -43,7 +43,7 @@ function cards(){const n=new Date(),r=rowOf(n);if(!r){$('#cards').innerHTML='';r
 
 /* ---------- Adhan / alerts ---------- */
 let audio=null,actx=null,stopSynth=false;
-function unlock(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume()}catch{}}
+function unlock(){try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume()}catch(_e){}}
 document.addEventListener('click',unlock,{once:true});
 function beep(count){unlock();if(!actx)return;stopSynth=false;for(let i=0;i<count;i++)setTimeout(()=>{if(stopSynth)return;
  const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=660;g.gain.value=db.set.vol*.3;o.connect(g);g.connect(actx.destination);o.start();o.stop(actx.currentTime+.6)},i*900)}
@@ -146,14 +146,14 @@ async function handle(f){
   $('#status').textContent=found?`✅ Recognised ${found} rows for ${MONTHS[best.m-1]} ${best.y}.${best.gotM?'':' (Month not detected – please check the month/year.)'} Please verify below.`:'⚠️ Could not recognise any rows. Try a sharper image, or fill the table manually.';
   openEditor(best.y,best.m,best.rows)}
  catch(e){$('#status').textContent='❌ OCR failed: '+e.message}
- finally{try{worker&&await worker.terminate()}catch{}}}
+ finally{try{worker&&await worker.terminate()}catch(_e){}}}
 let ed={};
 function openEditor(y,m,rows){ed={y,m};const days=new Date(y,m,0).getDate();$('#editor').hidden=false;$('#et').textContent=MONTHS[m-1]+' '+y;
  let h='<tr><th>Day</th>'+HEAD.map(x=>`<th>${x}</th>`).join('')+'</tr>';
  for(let d=1;d<=days;d++){const r=rows[d]||Array(11).fill('');h+=`<tr><td>${d}</td>${r.map((v,i)=>`<td><input data-d="${d}" data-i="${i}" value="${v}" placeholder="--:--"></td>`).join('')}</tr>`}
  $('#etbl').innerHTML=h}
 $('#save').onclick=()=>{let bad=0;const out={};
- document.querySelectorAll('#etbl input').forEach(i=>{const ok=OK(i.value.trim());i.classList.toggle('bad',!ok);if(!ok)bad++;(out[i.dataset.d]??=[])[i.dataset.i]=i.value.trim()});
+ document.querySelectorAll('#etbl input').forEach(i=>{const ok=OK(i.value.trim());i.classList.toggle('bad',!ok);if(!ok)bad++;(out[i.dataset.d]=out[i.dataset.d]||[])[i.dataset.i]=i.value.trim()});
  if(bad)return alert(`${bad} missing or invalid time(s) (format HH:MM, 24h). Highlighted in red – please correct.`);
  db.data[ed.y+'-'+ed.m]=out;save();$('#editor').hidden=true;$('#status').textContent='💾 Saved.';view=new Date(ed.y,ed.m-1,1);month();cards()};
 
@@ -181,7 +181,7 @@ function settings(){const s=db.set;
   s.notif=(await Notification.requestPermission())=='granted'?1:0;save();alert(s.notif?'Notifications enabled.':'Permission denied.')};
  $('#edit').onclick=()=>{const d=new Date(),D=db.data[key(d)]||{};document.querySelector('[data-v=upload]').click();openEditor(d.getFullYear(),d.getMonth()+1,D)};
  $('#exp').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db)],{type:'application/json'}));a.download='prayer-data.json';a.click()};
- $('#imp').onchange=e=>{const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.data||!j.set)throw 0;db=j;save();location.reload()}catch{alert('Invalid backup file.')}};r.readAsText(e.target.files[0])};
+ $('#imp').onchange=e=>{const r=new FileReader();r.onload=()=>{try{const j=JSON.parse(r.result);if(!j.data||!j.set)throw 0;db=j;save();location.reload()}catch(_e){alert('Invalid backup file.')}};r.readAsText(e.target.files[0])};
  $('#reset').onclick=()=>{if(confirm('Delete this month\'s timetable?')){delete db.data[key(new Date())];save();location.reload()}}}
 
 /* ---------- Init ---------- */
